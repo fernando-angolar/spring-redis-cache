@@ -6,7 +6,7 @@ import org.springframework.data.redis.cache.RedisCacheConfiguration;
 import org.springframework.data.redis.cache.RedisCacheManager;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.serializer.RedisSerializationContext;
-import org.springframework.data.redis.serializer.StringRedisSerializer;
+import org.springframework.data.redis.serializer.RedisSerializer;
 
 import java.time.Duration;
 import java.util.HashMap;
@@ -18,13 +18,13 @@ public class CacheConfig {
     @Bean
     public RedisCacheManager cacheManager(RedisConnectionFactory connectionFactory) {
         RedisCacheConfiguration baseConfiguration = RedisCacheConfiguration.defaultCacheConfig()
-                .serializeKeysWith(RedisSerializationContext.SerializationPair.fromSerializer(new StringRedisSerializer()))
+                .serializeKeysWith(RedisSerializationContext.SerializationPair.fromSerializer(RedisSerializer.string()))
+                .serializeValuesWith(RedisSerializationContext.SerializationPair.fromSerializer(RedisSerializer.json()))
                 .entryTtl(Duration.ofMinutes(10));
 
         Map<String, RedisCacheConfiguration> cacheConfigurations = new HashMap<>();
         cacheConfigurations.put("product", baseConfiguration.entryTtl(Duration.ofMinutes(10)));
-        cacheConfigurations.put("productList", baseConfiguration.entryTtl(Duration.ofMinutes(5)));
-        cacheConfigurations.put("productByCategory", baseConfiguration.entryTtl(Duration.ofMinutes(5)));
+        cacheConfigurations.put("products", baseConfiguration.entryTtl(Duration.ofMinutes(5)));
 
         return RedisCacheManager.builder(connectionFactory)
                 .cacheDefaults(baseConfiguration)
@@ -32,5 +32,6 @@ public class CacheConfig {
                 .transactionAware()
                 .build();
     }
+
 
 }
