@@ -6,16 +6,24 @@ import ao.com.angotech.entity.Product;
 import ao.com.angotech.repository.ProductRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.cache.Cache;
+import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.CachePut;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.cache.annotation.Caching;
+import org.springframework.data.redis.core.Cursor;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.ScanOptions;
 import org.springframework.stereotype.Service;
 
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.concurrent.atomic.AtomicLong;
 
 @Service
 public class ProductService {
@@ -25,11 +33,19 @@ public class ProductService {
 
     private final ProductRepository productRepository;
     private final RedisTemplate<String, Object> redisTemplate;
+    private final CacheManager cacheManager;
 
-    public ProductService(ProductRepository productRepository, RedisTemplate<String, Object> redisTemplate) {
+    private final AtomicLong cacheHits = new AtomicLong(0);
+    private final AtomicLong cacheMisses = new AtomicLong(0);
+
+    public ProductService(ProductRepository productRepository,
+                          RedisTemplate<String, Object> redisTemplate,
+                          CacheManager cacheManager) {
         this.productRepository = productRepository;
         this.redisTemplate = redisTemplate;
+        this.cacheManager = cacheManager;
     }
+
 
     public ProductDTO buscarPorId(Long id) {
         String cacheKey = PRODUCT_KEY_PREFIX + id;
@@ -101,6 +117,43 @@ public class ProductService {
         redisTemplate.opsForValue().set(PRODUCT_KEY_PREFIX + id, updatedDTO);
         return updatedDTO;
     }
+
+    public void limparTodoCache() {
+        for (String cacheName : cacheManager.getCacheNames()) {
+            Cache cache = cacheManager.getCache(cacheName);
+            if (cache != null) {
+                cache.clear();
+            }
+        }
+
+        try (Cursor<byte[]> cursor = redisTemplate.getConnectionFactory()
+                .getConnection()
+                .scan(ScanOptions.scanOptions().match(PRODUCT_KEY_PREFIX + "*").count(1000).build())) {
+            while (cursor.hasNext()) {
+                redisTemplate.delete(new String(cursor.next(), StandardCharsets.UTF_8));
+            }
+        } catch (Exception ex) {
+            logger.warn("Falha ao limpar chaves manuais do Redis: {}", ex.getMessage());
+        }
+    }
+
+    public Map<String, Object> obterEstatisticasCache() {
+        long hits = cacheHits.get();
+        long misses = cacheMisses.get();
+        long total = hits + misses;
+        double hitRate = total == 0 ? 0 : ((double) hits / total) * 100;
+
+        Map<String, Object> stats = new LinkedHashMap<>();
+        stats.put("hits", hits);
+        stats.put("misses", misses);
+        stats.put("totalConsultas", total);
+        stats.put("hitRatePercent", hitRate);
+        stats.put("cachesConfigurados", cacheManager.getCacheNames());
+
+        return stats;
+    }
+
+
 
     private ProductDTO toDTO(Product product) {
         return new ProductDTO(
