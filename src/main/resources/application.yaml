@@ -36,3 +36,10 @@ spring:
 #     password:
 #   jpa:
 #     database-platform: org.hibernate.dialect.H2Dialect
+
+# Seed de dados (desative em produção)
+app:
+  seed:
+  enabled: true
+  count: 100000
+  batch-size: 1000
