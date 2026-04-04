@@ -17,14 +17,21 @@ public class CacheConfig {
 
     @Bean
     public RedisCacheManager cacheManager(RedisConnectionFactory connectionFactory) {
+        // TTL default moderado para evitar dados muito desatualizados.
+        // Para dados de produto, preferimos consistência maior que retenção longa.
         RedisCacheConfiguration baseConfiguration = RedisCacheConfiguration.defaultCacheConfig()
                 .serializeKeysWith(RedisSerializationContext.SerializationPair.fromSerializer(RedisSerializer.string()))
                 .serializeValuesWith(RedisSerializationContext.SerializationPair.fromSerializer(RedisSerializer.json()))
-                .entryTtl(Duration.ofMinutes(10));
+                .entryTtl(Duration.ofMinutes(3));
 
         Map<String, RedisCacheConfiguration> cacheConfigurations = new HashMap<>();
-        cacheConfigurations.put("product", baseConfiguration.entryTtl(Duration.ofMinutes(10)));
-        cacheConfigurations.put("products", baseConfiguration.entryTtl(Duration.ofMinutes(5)));
+
+        // Produto individual: pode ficar um pouco mais tempo em cache.
+        cacheConfigurations.put("product", baseConfiguration.entryTtl(Duration.ofMinutes(3)));
+
+        // Listas (todos/categoria): dados mudam com mais frequência e podem ficar grandes.
+        // TTL menor reduz risco de staleness e consumo excessivo de memória.
+        cacheConfigurations.put("products", baseConfiguration.entryTtl(Duration.ofMinutes(1)));
 
         return RedisCacheManager.builder(connectionFactory)
                 .cacheDefaults(baseConfiguration)
@@ -32,6 +39,5 @@ public class CacheConfig {
                 .transactionAware()
                 .build();
     }
-
 
 }

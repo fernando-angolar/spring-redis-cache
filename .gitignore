@@ -31,3 +31,5 @@ build/
 
 ### VS Code ###
 .vscode/
+
+POSTMAN_TEST_PLAN.md
